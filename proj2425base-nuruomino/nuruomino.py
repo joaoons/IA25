@@ -6,7 +6,7 @@
 # ist1103243 João Santos
 # 00000 Diogo Ceia
 
-from search import Problem, Node
+from search import *
 import sys
 from sys import stdin
 import numpy as np
@@ -41,7 +41,7 @@ class Board:
 
         for i in range(rows):
             for j in range(cols):
-                if self.grid[i][j] == region:
+                if self.original[i][j] == region:
                     if j+1 < cols and self.original[i][j+1] != region:
                         adj_r.add(self.grid[i][j+1])
                     
@@ -83,11 +83,21 @@ class Board:
 
         return self.grid[row-1][col-1]
     
-    def print_instance(self):
-        """Imprime a grelha no formato standard output (stout)"""
+    #def print_instance(self):
+     #   """Imprime a grelha no formato standard output (stdout)"""
+      #  for row in self.grid:
+       #     sys.stdout.write('\t'.join(str(value) for value in row) + '\r\n')
 
-        for row in self.grid:
-            print('\t'.join(value for value in row))
+    def print_instance(self):
+        """Imprime a grelha no formato standard output (stdout)"""
+
+        last_index = len(self.grid) - 1
+        for i, row in enumerate(self.grid):
+            line = '\t'.join(str(value) for value in row)
+            if i != last_index:
+                sys.stdout.write(line + '\r\n')  
+            else:
+                sys.stdout.write(line) 
 
     def orthogonal_values(self, row:int, col:int) -> list:
         """Devolve os valores das celulas adjacentes à posição, nas direções ortogonais."""
@@ -147,11 +157,10 @@ class Board:
     def copy(self):
         """Devolve uma cópia independente do tabuleiro."""
 
-        new_grid = np.copy(self.grid).tolist()
-        new_original = np.copy(self.original).tolist()
+        new_grid = [row[:] for row in self.grid]
+        new_original = [row[:] for row in self.original]
         new_board = Board(new_grid)
         new_board.original = new_original
-
         return new_board
 
     def fits(self, region:int, form:list) -> list: #! neste momento esta 0 index mas talvez mudar 
@@ -216,7 +225,8 @@ class Nuruomino(Problem):
     def __init__(self, board: Board, goal=None):
         """O construtor especifica o estado inicial."""
 
-        super().__init__(initial=board, goal=goal)
+        initial_state = NuruominoState(board)
+        super().__init__(initial_state)
          
     def actions(self, state: NuruominoState):
         """Retorna uma lista de ações que podem ser executadas a
@@ -226,6 +236,7 @@ class Nuruomino(Problem):
         cols=len(state.board.original[0])
         reg_free=set(state.board.regions(True))
         actions=[]
+        seen = set()
 
         L=[
             [[1, 0],[1, 0],[1, 1]],
@@ -265,29 +276,32 @@ class Nuruomino(Problem):
             for j in range(cols):
                 if state.board.grid[i][j] != state.board.original[i][j]:
                     reg_free.discard(int(state.board.original[i][j])) #! se derem um board original com peças isso buga tudo
- 
+
         for r in reg_free: #Check if a region is free
             for tetro_name, tetro_forms in tetros.items(): 
                 for tetro in tetro_forms:
                     for pos in state.board.fits(r,tetro): #Check if a Tetromino fits in a region
-                        valid=True
+                        key = (r, tuple(tuple(row) for row in tetro), pos)
+                        if key in seen:
+                            continue 
+                        seen.add(key)
                         copy = state.board.copy()
+                        placed_cells = []
+
                         for i in range(len(tetro)):
                             for j in range(len(tetro[0])):
                                 if tetro[i][j] == 1:   
                                     pos_x = pos[0] + i
                                     pos_y = pos[1] + j
-
-                                    #print(f"Checking cell ({pos_x}, {pos_y}), piece {tetro_name}")
-                                    #print("Orthogonal values:", state.board.orthogonal_values(pos_x + 1, pos_y + 1))
-                                    if tetro_name in state.board.orthogonal_values(pos_x + 1, pos_y + 1): #Check if is orthogonally connected to an equal Tetromino
-                                        valid = False
-                                        break                   
                                     copy.grid[pos_x][pos_y] = tetro_name
-                            
-                            if not valid:
+                                    placed_cells.append((pos_x, pos_y))
+                        
+                        valid = True
+                        for x, y in placed_cells:
+                            if tetro_name in state.board.orthogonal_values(x + 1, y + 1):
+                                valid = False
                                 break
-                            
+
                         if valid and not copy.square():
                             actions.append((r,tetro_name,tetro,(pos[0]+1,pos[1]+1))) 
 
@@ -306,7 +320,6 @@ class Nuruomino(Problem):
         pos = (action[3][0] - 1, action[3][1] - 1)
 
         if action not in self.actions(state):
-            print("Generated actions:")
             for a in self.actions(state):
                 print(a)
             raise ValueError("Invalid action: this move is not allowed.")
@@ -329,7 +342,7 @@ class Nuruomino(Problem):
         cols=len(state.board.original[0])
 
         #Verificar se existe algum quadrado
-        if state.board.square:
+        if state.board.square():
             return False
 
         #Verificar se todas as regioes estão preenchidas e por apenas uma peça
@@ -380,7 +393,6 @@ class Nuruomino(Problem):
 
     def h(self, node: Node):
         """Função heuristica utilizada para a procura A*."""
-        # TODO
         pass
 '''
 # Ler grelha do figura 1a:
@@ -402,7 +414,7 @@ result_state = s1 = problem.result(initial_state, (1, 'L', [[1, 1],[1, 0],[1, 0]
 print(result_state.board.get_value(2, 1))
 # Mostrar os valores de posições adjacentes
 print(result_state.board.adjacent_values(2,2))
-'''
+
 
 #Exemplo 3
 
@@ -414,9 +426,6 @@ problem = Nuruomino(board)
 s0 = NuruominoState(board)
 # Aplicar as ações que resolvem a instância
 s1 = problem.result(s0, (1, 'L', [[1, 1],[1, 0],[1, 0]],(1,1)))
-print("Current board after s1:")
-for row in s1.board.grid:
-    print(row)
 s2 = problem.result(s1, (2, 'S', [[1, 0], [1, 1],[0, 1]],(1,3)))
 s3 = problem.result(s2, (3, 'T', [[1, 0],[1, 1],[1, 0]],(4,4)))
 s4 = problem.result(s3, (4, 'L', [[1, 1, 1],[1, 0, 0]],(5,1)))
@@ -424,4 +433,16 @@ s5 = problem.result(s4, (5, 'I', [[1],[1],[1],[1]],(3,6)))
 # Verificar se foi atingida a solução
 print("Is goal?", problem.goal_test(s2))
 print("Is goal?", problem.goal_test(s5))
-print("Solution:\n", s5.board.print(), sep="")
+print("Solution:\n", s5.board.print_instance(), sep="")
+'''
+
+if __name__ == "__main__":
+    #Exemplo 4:
+    # Ler grelha do figura 1a:
+    board = Board.parse_instance()
+    # Criar uma instância de Nuruomino:
+    problem = Nuruomino(board)
+    # Obter o nó solução usando a procura em profundidade:
+    goal_node = depth_first_graph_search(problem)
+    # Verificar se foi atingida a solução
+    goal_node.state.board.print_instance()  # or .print(), if that's what it should be
